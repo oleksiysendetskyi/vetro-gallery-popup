@@ -87,8 +87,15 @@
   /* ===== bottom thumbnail strip ===== */
   .mv_thumbs_panel{
     flex-shrink:0;border-top:1px solid #ECEAE3;
-    padding:10px 16px 14px;
+    padding:10px 16px 14px;position:relative;
   }
+  .thumbs_fade{
+    position:absolute;top:1px;bottom:0;width:32px;
+    pointer-events:none;z-index:1;opacity:0;transition:opacity .2s;
+  }
+  .thumbs_fade--left{left:0;background:linear-gradient(90deg,#fff 20%,rgba(255,255,255,0))}
+  .thumbs_fade--right{right:0;background:linear-gradient(270deg,#fff 20%,rgba(255,255,255,0))}
+  .thumbs_fade.is-visible{opacity:1}
   .thumbs_strip{
     display:flex;gap:8px;overflow-x:auto;
     scroll-behavior:smooth;padding-bottom:4px;
@@ -157,6 +164,8 @@
     </div>
 
     <div class="mv_thumbs_panel">
+      <div class="thumbs_fade thumbs_fade--left js-thumbs-fade-l"></div>
+      <div class="thumbs_fade thumbs_fade--right js-thumbs-fade-r"></div>
       <div class="thumbs_strip js-thumbs-strip"></div>
     </div>
   </div>
@@ -239,6 +248,7 @@
     overlay.classList.add('is-open');
     overlay.setAttribute('aria-hidden','false');
     document.body.style.overflow = 'hidden';
+    setTimeout(updateFades, 0);
   }
   function close(){
     overlay.classList.remove('is-open');
@@ -267,6 +277,17 @@
   document.querySelector('.js-open-viewer').addEventListener('click', function(){ open(0); });
 
   overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+
+  /* edge fades: hint that the strip scrolls */
+  var fadeL = document.querySelector('.js-thumbs-fade-l');
+  var fadeR = document.querySelector('.js-thumbs-fade-r');
+  function updateFades(){
+    fadeL.classList.toggle('is-visible', strip.scrollLeft > 4);
+    fadeR.classList.toggle('is-visible', strip.scrollLeft < strip.scrollWidth - strip.clientWidth - 4);
+  }
+  strip.addEventListener('scroll', updateFades);
+  window.addEventListener('resize', updateFades);
+  updateFades();
 
   document.addEventListener('keydown', function(e){
     if (!overlay.classList.contains('is-open')) return;
