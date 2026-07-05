@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vetro — media viewer popup (new structure)</title>
+<style>
+  :root{
+    --mv-accent:#9A4152;
+    --mv-border:#D3D1C7;
+    --mv-bg:#fff;
+    --mv-overlay:rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;background:#f6f5f1;min-height:100vh;display:flex;align-items:center;justify-content:center}
+
+  .demo-open{padding:12px 28px;background:var(--mv-accent);color:#fff;border:0;border-radius:4px;font-size:15px;cursor:pointer}
+
+  /* ===== modal shell ===== */
+  .wf-modal-overlay{
+    position:fixed;inset:0;background:var(--mv-overlay);
+    display:none;align-items:center;justify-content:center;
+    z-index:1000;padding:56px 110px;
+  }
+  .wf-modal-overlay.is-open{display:flex}
+
+  .wf-modal{
+    position:relative;background:var(--mv-bg);border-radius:4px;
+    width:100%;max-height:calc(100vh - 112px);
+    display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 10px 40px rgba(0,0,0,.3);
+  }
+  /* wrapper: sizes itself to the modal, buttons anchor to its edges */
+  .mv_stage{position:relative;width:min(1100px,100%);}
+
+  .wf-modal-close{
+    position:absolute;top:0;right:-46px;z-index:3;
+    width:36px;height:36px;border:0;background:transparent;cursor:pointer;
+    color:#fff;font-size:0;
+  }
+  .wf-modal-close::before,.wf-modal-close::after{
+    content:"";position:absolute;top:50%;left:50%;width:20px;height:2px;
+    background:currentColor;
+  }
+  .wf-modal-close::before{transform:translate(-50%,-50%) rotate(45deg)}
+  .wf-modal-close::after{transform:translate(-50%,-50%) rotate(-45deg)}
+  .wf-modal-close:hover{color:#ccc}
+
+  /* ===== main image row ===== */
+  .mv_main_row{
+    flex:1;min-height:0;
+    display:flex;align-items:center;
+    padding:20px 20px 12px;
+  }
+  .mv_arrow{
+    position:absolute;top:50%;transform:translateY(-50%);z-index:2;
+    padding:14px 8px;border:0;background:transparent;cursor:pointer;
+    color:#fff;transition:color .15s,transform .15s;
+  }
+  .mv_arrow:hover{color:var(--mv-accent)}
+  .mv_arrow svg{width:48px;height:20px;display:block}
+  .js-mv-prev{left:-76px}
+  .js-mv-next{right:-76px}
+  .js-mv-prev:hover{transform:translateY(-50%) translateX(-4px)}
+  .js-mv-next:hover{transform:translateY(-50%) translateX(4px)}
+
+  .mv_main_img_wrap{
+    position:relative;flex:1;min-width:0;height:100%;
+    min-height:300px;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;background:#faf9f7;border-radius:2px;
+  }
+  .js-zoom-wrap-img{
+    max-width:100%;max-height:100%;
+    width:auto;height:auto;object-fit:contain;
+    cursor:zoom-in;transition:transform .25s ease;
+    transform-origin:center center;
+  }
+  .mv_main_img_wrap.is-zoomed .js-zoom-wrap-img{cursor:zoom-out}
+
+  .mv_counter{
+    position:absolute;right:10px;bottom:10px;
+    background:rgba(255,255,255,.9);border-radius:12px;
+    font-size:13px;color:#5F5E5A;padding:3px 12px;pointer-events:none;
+  }
+
+  /* ===== bottom thumbnail strip ===== */
+  .mv_thumbs_panel{
+    flex-shrink:0;border-top:1px solid #ECEAE3;
+    padding:10px 16px 14px;
+  }
+  .thumbs_strip{
+    display:flex;gap:8px;overflow-x:auto;
+    scroll-behavior:smooth;padding-bottom:4px;
+  }
+  .thumbs_strip::-webkit-scrollbar{height:6px}
+  .thumbs_strip::-webkit-scrollbar-thumb{background:var(--mv-border);border-radius:3px}
+  .mv-thumb{
+    flex:0 0 64px;width:64px;height:64px;
+    object-fit:cover;border-radius:2px;cursor:pointer;
+    border:2px solid transparent;opacity:.75;
+    transition:opacity .15s,border-color .15s;
+  }
+  .mv-thumb:hover{opacity:1}
+  .mv-thumb.thumb_selected{border-color:var(--mv-accent);opacity:1}
+
+  /* 3D tile at the end of the strip */
+  .mv-thumb-3d{
+    flex:0 0 64px;width:64px;height:64px;border-radius:2px;cursor:pointer;
+    border:2px solid transparent;background:#F1EFE8;opacity:.85;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    color:#5F5E5A;font-size:11px;font-weight:bold;
+    transition:opacity .15s,border-color .15s;
+  }
+  .mv-thumb-3d:hover{opacity:1}
+  .mv-thumb-3d.thumb_selected{border-color:var(--mv-accent);opacity:1;color:var(--mv-accent)}
+  .mv-thumb-3d svg{width:24px;height:24px}
+
+  .js-3d-viewer{width:100%;height:100%;min-height:300px;display:none}
+  .mv_main_img_wrap.is-3d .js-3d-viewer{display:block}
+  .mv_main_img_wrap.is-3d .js-zoom-wrap-img,
+  .mv_main_img_wrap.is-3d .mv_counter{display:none}
+
+  @media (max-width:900px){
+    .wf-modal-overlay{padding:48px 10px 16px}
+    .mv_main_row{padding:16px 10px 8px}
+    .mv_arrow svg{width:32px;height:16px}
+    .js-mv-prev{left:6px}
+    .js-mv-next{right:6px}
+    .wf-modal-close{top:-40px;right:0}
+    .mv-thumb{flex-basis:52px;width:52px;height:52px}
+  }
+</style>
+</head>
+<body>
+
+<button class="demo-open js-open-viewer">Відкрити галерею</button>
+
+<div class="wf-modal-overlay js-wf-modal" aria-hidden="true">
+  <div class="mv_stage">
+  <button class="wf-modal-close js-modal-close" aria-label="Close"></button>
+
+  <button class="mv_arrow js-mv-prev" aria-label="Previous image">
+    <svg viewBox="0 0 48 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="46" y1="10" x2="4" y2="10"/><polyline points="12 2 4 10 12 18"/></svg>
+  </button>
+  <button class="mv_arrow js-mv-next" aria-label="Next image">
+    <svg viewBox="0 0 48 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="10" x2="44" y2="10"/><polyline points="36 2 44 10 36 18"/></svg>
+  </button>
+
+  <div class="wf-modal" role="dialog" aria-modal="true" aria-label="Product images">
+    <div class="mv_main_row">
+      <div class="mv_main_img_wrap js-main-img-wrap">
+        <img class="js-zoom-wrap-img" src="" alt="Product image">
+        <model-viewer class="js-3d-viewer" camera-controls touch-action="pan-y" shadow-intensity="1" alt="3D model"></model-viewer>
+        <span class="mv_counter js-mv-counter">1 / 1</span>
+      </div>
+    </div>
+
+    <div class="mv_thumbs_panel">
+      <div class="thumbs_strip js-thumbs-strip"></div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<script>
+(function(){
+  var BASE = 'https://vetrofurniture.com.au/storage/';
+  /* full = path + '-zoom.jpg', thumb = path + '-preview.jpg' */
+  var IMAGES = [
+    '14802/conversions/6a45094b60c69_6a4507882168e_BRN01-DTL-+-HLK07-+-BRN01-BUF-(2)',
+    '14801/conversions/6a4507d4bad96_BRN01-DTL-+-HLK07-+-BRN01-BUF-(1)',
+    '14799/conversions/6a45078628982_BRN01-DTL-+-HLK07-+-BRN01-BUF-(4)',
+    '14796/conversions/6a450752b4b58_BRN01-DTL-+-HAR06-+-BRN01-BUF-(2)',
+    '14798/conversions/6a450753e96f1_BRN01-DTL-+-HAR06-+-BRN01-BUF-(1)',
+    '14797/conversions/6a450752b8793_BRN01-DTL-+-HAR06-+-BRN01-BUF-(3)',
+    '14795/conversions/6a4506f4475f6_BRN01-DTL-+-CEN03-+-BRN01-BUF-(2)',
+    '14794/conversions/6a4506f445e2b_BRN01-DTL-+-CEN03-+-BRN01-BUF-(1)',
+    '14793/conversions/6a4506f304c52_BRN01-DTL-+-CEN03-+-BRN01-BUF-(3)',
+    '14792/conversions/6a4506f2bfb9b_BRN01-DTL-+-BRN01-BUF',
+    '13531/conversions/69d933907b0f3_69d93308e7ad9_BRN01-DTL-(1)',
+    '13532/conversions/69d9339e05a56_69d93308e7cef_BRN01-DTL-(2)',
+    '13533/conversions/69d933a8c7d13_69d9330b14a7a_BRN01-DTL-(3)'
+  ].map(function(p){ return { full: BASE+p+'-zoom.jpg', thumb: BASE+p+'-preview.jpg' }; });
+
+  /* URL .glb/.gltf моделі товару; null — тайл 3D не показується */
+  var MODEL_3D = 'https://modelviewer.dev/shared-assets/models/Chair.glb';
+
+  var overlay  = document.querySelector('.js-wf-modal');
+  var imgWrap  = document.querySelector('.js-main-img-wrap');
+  var mainImg  = document.querySelector('.js-zoom-wrap-img');
+  var counter  = document.querySelector('.js-mv-counter');
+  var strip    = document.querySelector('.js-thumbs-strip');
+  var viewer3d = document.querySelector('.js-3d-viewer');
+  var current  = 0;
+  var TOTAL    = IMAGES.length + (MODEL_3D ? 1 : 0);
+
+  IMAGES.forEach(function(im, i){
+    var t = document.createElement('img');
+    t.className = 'mv-thumb';
+    t.src = im.thumb;
+    t.alt = 'Thumbnail ' + (i+1);
+    t.dataset.index = i;
+    t.addEventListener('click', function(){ show(i); });
+    strip.appendChild(t);
+  });
+
+  if (MODEL_3D){
+    var t3 = document.createElement('div');
+    t3.className = 'mv-thumb-3d';
+    t3.setAttribute('role','button');
+    t3.setAttribute('aria-label','3D view');
+    t3.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 21 7v10l-9 5-9-5V7z"/><path d="M12 22V12"/><path d="M21 7l-9 5-9-5"/></svg><span>3D</span>';
+    t3.addEventListener('click', function(){ show(IMAGES.length); });
+    strip.appendChild(t3);
+  }
+
+  function show(i){
+    current = (i + TOTAL) % TOTAL;
+    var is3d = MODEL_3D && current === IMAGES.length;
+    imgWrap.classList.toggle('is-3d', is3d);
+    imgWrap.classList.remove('is-zoomed');
+    mainImg.style.transform = '';
+    if (is3d){
+      if (!viewer3d.getAttribute('src')) viewer3d.setAttribute('src', MODEL_3D);
+    } else {
+      mainImg.src = IMAGES[current].full;
+      counter.textContent = (current+1) + ' / ' + IMAGES.length;
+    }
+    var thumbs = strip.children;
+    for (var j = 0; j < thumbs.length; j++)
+      thumbs[j].classList.toggle('thumb_selected', j === current);
+    thumbs[current].scrollIntoView({ behavior:'smooth', inline:'center', block:'nearest' });
+  }
+
+  function open(i){
+    show(i || 0);
+    overlay.classList.add('is-open');
+    overlay.setAttribute('aria-hidden','false');
+    document.body.style.overflow = 'hidden';
+  }
+  function close(){
+    overlay.classList.remove('is-open');
+    overlay.setAttribute('aria-hidden','true');
+    document.body.style.overflow = '';
+  }
+
+  /* zoom on click: 2x, follows cursor */
+  mainImg.addEventListener('click', function(e){
+    if (imgWrap.classList.contains('is-3d')) return;
+    var zoomed = imgWrap.classList.toggle('is-zoomed');
+    if (zoomed){
+      var r = mainImg.getBoundingClientRect();
+      var ox = ((e.clientX - r.left) / r.width) * 100;
+      var oy = ((e.clientY - r.top) / r.height) * 100;
+      mainImg.style.transformOrigin = ox + '% ' + oy + '%';
+      mainImg.style.transform = 'scale(2)';
+    } else {
+      mainImg.style.transform = '';
+    }
+  });
+
+  document.querySelector('.js-mv-prev').addEventListener('click', function(){ show(current-1); });
+  document.querySelector('.js-mv-next').addEventListener('click', function(){ show(current+1); });
+  document.querySelector('.js-modal-close').addEventListener('click', close);
+  document.querySelector('.js-open-viewer').addEventListener('click', function(){ open(0); });
+
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+
+  document.addEventListener('keydown', function(e){
+    if (!overlay.classList.contains('is-open')) return;
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowLeft') show(current-1);
+    if (e.key === 'ArrowRight') show(current+1);
+  });
+})();
+</script>
+</body>
+</html>
